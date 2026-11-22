@@ -106,10 +106,64 @@ Each run:
 
 ## Adding a new target
 
-1. Create `fuzz/fuzz_targets/<name>.rs`.
-2. Add a `[[bin]]` entry to `fuzz/Cargo.toml`.
-3. Add seed inputs to `fuzz/corpus/<name>/`.
-4. Add `<name>` to both `matrix.target` lists in `.github/workflows/fuzz.yml`.
+Follow these four steps. Use `cursor_query` as a reference — its files are
+`fuzz/fuzz_targets/cursor_query.rs`, the `[[bin]]` block in `fuzz/Cargo.toml`, and
+the seeds under `fuzz/corpus/cursor_query/`.
+
+### 1. Create the target file
+
+Create `fuzz/fuzz_targets/<name>.rs`. The file must include the `#![no_main]`
+attribute and invoke the `fuzz_target!` macro from `libfuzzer_sys`:
+
+```rust
+#![no_main]
+
+use libfuzzer_sys::fuzz_target;
+
+fuzz_target!(|data: &[u8]| {
+    // Drive the code under test with `data`.
+    // Panic on any invariant violation — libFuzzer treats a panic as a finding.
+});
+```
+
+If your target needs structured input, derive `Arbitrary` on a local type and use
+`fuzz_target!(|input: MyInput|` instead.
+
+### 2. Register the target in `fuzz/Cargo.toml`
+
+Add a `[[bin]]` entry with `test = false` and `doc = false` (required by cargo-fuzz):
+
+```toml
+[[bin]]
+name = "<name>"
+path = "fuzz_targets/<name>.rs"
+test = false
+doc = false
+```
+
+Add any new dependencies the target needs to `[dependencies]` in the same file.
+
+### 3. Seed the corpus
+
+Create `fuzz/corpus/<name>/` and add at least a few representative seed inputs as
+plain files (no extension). Each file is one raw input byte sequence. Meaningful seeds
+give the fuzzer a head-start and serve as a smoke-test corpus:
+
+```
+fuzz/corpus/<name>/empty          # zero bytes or a minimal valid input
+fuzz/corpus/<name>/typical        # a normal, expected input
+fuzz/corpus/<name>/edge_case      # a boundary or error-triggering input
+```
+
+Seed files are plain text when the target accepts strings (e.g. URL-encoded data) and
+raw bytes otherwise. See `fuzz/corpus/cursor_query/` for an example of text seeds.
+
+### 4. Register in CI
+
+Add `<name>` to **both** `matrix.target` lists in `.github/workflows/fuzz.yml` — one
+list under the `fuzzing-pr` job (5-minute budget) and one under `fuzzing-nightly`
+(10-minute budget). Both lists must stay in sync; a target absent from either list
+will not be run in that workflow.
 
 ---
 
