@@ -13,25 +13,53 @@ per query, where `<hash>` is the SHA-256 of the query string. With the
 metadata present, the macros compile without a live database
 (`SQLX_OFFLINE=true` or simply no `DATABASE_URL` set).
 
-## Regenerating the metadata
+## Regenerating the cache
 
-After changing any query that uses a macro (or adding a new one), regenerate
-the metadata and commit the result:
+### When to regenerate
+
+Regenerate `.sqlx/` whenever you:
+
+- change the SQL text of an existing `sqlx::query!` / `sqlx::query_as!` / `sqlx::query_scalar!` call, or
+- add a new query macro, or
+- change the result type of an existing macro query (column alias, override, or struct field).
+
+The hash in each `query-<hash>.json` filename is the SHA-256 of the query string, so any
+edit to the query string produces a new file and orphans the old one. If you forget to
+regenerate, CI will catch it (see below).
+
+### The command
+
+Point `DATABASE_URL` at a database that has had all migrations applied, then run:
 
 ```bash
-# point at a database that has had all migrations applied
-DATABASE_URL=sqlite://zenith.db sqlx migrate run   # first time only
+# Apply migrations if you have not already (first time or after adding a migration):
+DATABASE_URL=sqlite://zenith.db sqlx migrate run
+
+# Regenerate every query-*.json file in .sqlx/:
 DATABASE_URL=sqlite://zenith.db cargo sqlx prepare
 ```
 
-`cargo sqlx prepare` re-describes every macro query against the live
-database and rewrites `.sqlx/`. Commit the changed `query-*.json` files
-alongside the code change.
+`cargo sqlx prepare` re-describes every macro query against the live database and
+rewrites the matching files under `.sqlx/`. The output lands in `.sqlx/` at the
+workspace root — one `query-<hash>.json` file per distinct query string.
 
-CI runs `cargo sqlx prepare --check` against a freshly migrated database on
-every push/PR. It fails if `.sqlx/` is missing a query or if any metadata
-file differs from what the live database describes — i.e. exactly when you
-forgot to run `cargo sqlx prepare`.
+### Committing the result
+
+The regenerated `query-*.json` files are part of the source tree and **must be committed
+in the same commit as the query change** that produced them. Reviewers should see the
+metadata and the query change together.
+
+### Makefile
+
+There is no dedicated `make` target for `cargo sqlx prepare`. Run the command directly
+as shown above.
+
+### CI check
+
+CI runs `cargo sqlx prepare --check` against a freshly migrated database on every
+push/PR. It fails if `.sqlx/` is missing a file for any query or if any existing file
+differs from what the live database describes — that is exactly the case when you forgot
+to run `cargo sqlx prepare` after editing a query.
 
 ## Building without a database
 
