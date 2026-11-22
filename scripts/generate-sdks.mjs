@@ -1,4 +1,5 @@
 import { cp, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 
@@ -6,6 +7,12 @@ const root = resolve(".");
 const version = (process.argv[2] ?? "0.1.0").replace(/^v/, "");
 if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.test(version)) {
   throw new Error(`invalid SDK version: ${version}`);
+}
+
+const specHostPath = resolve(root, "openapi/openapi.yaml");
+if (!existsSync(specHostPath)) {
+  process.stderr.write(`error: OpenAPI spec not found: ${specHostPath}\n`);
+  process.exit(1);
 }
 
 const image = "openapitools/openapi-generator-cli:v7.15.0";
